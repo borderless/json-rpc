@@ -1,24 +1,25 @@
 import * as t from "io-ts";
-import { createRpc, parse } from "./index";
-import { isLeft, isRight } from "fp-ts/lib/Either";
+import { createServer, parse, createClient } from "./index";
+import { isLeft, isRight, either } from "fp-ts/lib/Either";
 
 describe("json rpc", () => {
-  const rpc = createRpc(
-    {
-      hello: {
-        request: t.type({}),
-        response: t.string
-      },
-      echo: {
-        request: t.type({ arg: t.string }),
-        response: t.string
-      }
+  const methods = {
+    hello: {
+      request: t.type({}),
+      response: t.string
     },
-    {
-      hello: _ => "Hello World!",
-      echo: ({ arg }) => arg
+    echo: {
+      request: t.type({ arg: t.string }),
+      response: t.string
     }
-  );
+  };
+
+  const server = createServer(methods, {
+    hello: _ => "Hello World!",
+    echo: ({ arg }) => arg
+  });
+
+  const client = createClient(methods, x => server(x, undefined));
 
   describe("parse", () => {
     it("should parse json", () => {
@@ -42,10 +43,10 @@ describe("json rpc", () => {
     });
   });
 
-  describe("rpc", () => {
+  describe("server", () => {
     describe("object", () => {
       it("should respond", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "hello"
@@ -59,7 +60,7 @@ describe("json rpc", () => {
       });
 
       it("should not respond to notification", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           method: "hello"
         });
@@ -68,7 +69,7 @@ describe("json rpc", () => {
       });
 
       it("should accept an array of parameters", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "echo",
@@ -83,7 +84,7 @@ describe("json rpc", () => {
       });
 
       it("should accept an object of parameters", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "echo",
@@ -100,7 +101,7 @@ describe("json rpc", () => {
 
     describe("array", () => {
       it("should respond", async () => {
-        const res = await rpc([
+        const res = await server([
           {
             jsonrpc: "2.0",
             id: 1,
@@ -130,7 +131,7 @@ describe("json rpc", () => {
 
     describe("invalid", () => {
       it("should fail on malformed request", async () => {
-        const res = await rpc(123);
+        const res = await server(123);
 
         expect(res).toEqual({
           jsonrpc: "2.0",
@@ -143,7 +144,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on malformed request object", async () => {
-        const res = await rpc({});
+        const res = await server({});
 
         expect(res).toEqual({
           jsonrpc: "2.0",
@@ -156,7 +157,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on empty batch request", async () => {
-        const res = await rpc([]);
+        const res = await server([]);
 
         expect(res).toEqual({
           jsonrpc: "2.0",
@@ -169,7 +170,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on invalid request rpc id", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: {}
         });
@@ -185,7 +186,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on fractional numeric request rpc id", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: 123.5
         });
@@ -201,7 +202,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on method not found", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "missing"
@@ -218,7 +219,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on missing parameters", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "echo"
@@ -236,7 +237,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on invalid parameters", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "echo",
@@ -254,7 +255,7 @@ describe("json rpc", () => {
       });
 
       it("should fail on invalid parameters", async () => {
-        const res = await rpc({
+        const res = await server({
           jsonrpc: "2.0",
           id: "test",
           method: "echo",
@@ -269,6 +270,56 @@ describe("json rpc", () => {
             message: "Invalid request"
           }
         });
+      });
+    });
+  });
+
+  describe("client", () => {
+    describe("request", () => {
+      it("should make a request", async () => {
+        const result = await client({ method: "hello", params: {} });
+
+        expect(result).toEqual("Hello World!");
+      });
+
+      it("should make a notification request", async () => {
+        const result = await client({
+          method: "hello",
+          params: {},
+          async: true
+        });
+
+        expect(result).toEqual(undefined);
+      });
+    });
+
+    describe("batch", () => {
+      it("should make a batch request", async () => {
+        const result = await client.batch(
+          { method: "hello", params: {} },
+          { method: "echo", params: { arg: "test" } }
+        );
+
+        expect(result).toEqual(["Hello World!", "test"]);
+      });
+
+      it("should make a batch notification request", async () => {
+        const result = await client.batch(
+          { method: "hello", params: {}, async: true },
+          { method: "echo", params: { arg: "test" }, async: true }
+        );
+
+        expect(result).toEqual([undefined, undefined]);
+      });
+
+      it("should handle mixed batch responses", async () => {
+        const result = await client.batch(
+          { method: "hello", params: {}, async: true },
+          { method: "echo", params: { arg: "test" } },
+          { method: "hello", params: {}, async: true }
+        );
+
+        expect(result).toEqual([undefined, "test", undefined]);
       });
     });
   });
