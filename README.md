@@ -69,6 +69,7 @@ import { createClient } from "@borderlesslabs/json-rpc";
 
 const client = createClient(methods, async x => {
   const res = await fetch("...", {
+    method: "POST",
     body: JSON.stringify(x),
     headers: {
       "Content-Type": "application/json"
