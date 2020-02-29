@@ -1,5 +1,5 @@
 import { BaseError } from "make-error";
-import { TypeOf, Any, TypeC, Errors } from "io-ts";
+import { TypeOf, Any, TypeC } from "io-ts";
 import { PathReporter } from "io-ts/lib/PathReporter";
 import { either } from "fp-ts";
 
@@ -90,23 +90,18 @@ const METHOD_NOT_FOUND = { code: -32601, message: "Method not found" };
 const PARSE_ERROR = { code: -32700, message: "Parse error" };
 
 /**
+ * Parse raw input into JSON.
+ */
+export function parse(input: string): either.Either<JsonRpcError, unknown> {
+  return either.parseJSON(input, () => PARSE_ERROR);
+}
+
+/**
  * Create a custom RPC error to report issues.
  */
 export class RpcError<T = void> extends BaseError {
   constructor(public message: string, public code = -32603, public data: T) {
     super(message);
-  }
-}
-
-/**
- * Parse raw input into JSON.
- */
-export function parse(input: string): either.Either<JsonRpcError, unknown> {
-  try {
-    const value = JSON.parse(input);
-    return either.right(value);
-  } catch (err) {
-    return either.left(PARSE_ERROR);
   }
 }
 
@@ -140,20 +135,14 @@ function failure<T = never>(
 }
 
 /**
- * Ensure `key` is a property of `obj` in type-safe compatible way.
- */
-function has<T extends string>(obj: Record<T, any>, key: string): key is T {
-  return Object.prototype.hasOwnProperty.call(obj, key);
-}
-
-/**
  * Validate RPC message is correctly formatted and type-safe.
  */
 async function processRequest<T extends Methods, C = void>(
   methods: T,
   resolvers: Resolvers<T, C>,
   message: unknown,
-  context: C
+  context: C,
+  options: ServerOptions
 ): Promise<JsonRpcSuccess<any> | JsonRpcFailure<any> | undefined> {
   if (message === null || typeof message !== "object") {
     return failure(INVALID_REQUEST, null);
@@ -170,7 +159,7 @@ async function processRequest<T extends Methods, C = void>(
     return failure(INVALID_REQUEST, id ?? null);
   }
 
-  if (!has(methods, method)) {
+  if (!(method in methods)) {
     return failure(METHOD_NOT_FOUND, id);
   }
 
@@ -188,7 +177,8 @@ async function processRequest<T extends Methods, C = void>(
     return failure(INVALID_REQUEST, id);
   }
 
-  const input = request.decode(data);
+  const input =
+    options.decode === false ? either.right(data) : request.decode(data);
 
   if (either.isLeft(input)) {
     return failure(
@@ -206,7 +196,7 @@ async function processRequest<T extends Methods, C = void>(
   try {
     const data = await resolvers[method](input.right, context, metadata);
     if (isNotification) return; // Do not encode response for notifications.
-    return success(response.encode(data), id);
+    return success(options.encode === false ? data : response.encode(data), id);
   } catch (err) {
     return failure(
       {
@@ -220,11 +210,22 @@ async function processRequest<T extends Methods, C = void>(
 }
 
 /**
+ * Configure the server options.
+ */
+export interface ServerOptions {
+  // Decodes the request before processing by resolvers.
+  decode?: boolean;
+  // Encodes the response before returning to client.
+  encode?: boolean;
+}
+
+/**
  * Create a JSON RPC request handler.
  */
 export function createServer<T extends Methods, C = void>(
   methods: T,
-  resolvers: Resolvers<T, C>
+  resolvers: Resolvers<T, C>,
+  options: ServerOptions = {}
 ) {
   return async function rpcServer(payload: unknown, context: C) {
     if (Array.isArray(payload)) {
@@ -233,7 +234,9 @@ export function createServer<T extends Methods, C = void>(
       }
 
       const results = await Promise.all(
-        payload.map(x => processRequest(methods, resolvers, x, context))
+        payload.map(x =>
+          processRequest(methods, resolvers, x, context, options)
+        )
       );
 
       return results.filter((x): x is
@@ -243,7 +246,7 @@ export function createServer<T extends Methods, C = void>(
       });
     }
 
-    return processRequest(methods, resolvers, payload, context);
+    return processRequest(methods, resolvers, payload, context, options);
   };
 }
 
@@ -259,13 +262,22 @@ type ClientMethods<T extends Methods> = {
 }[keyof T & string];
 
 /**
+ * Configure client options.
+ */
+export interface ClientOptions {
+  encode?: boolean;
+  decode?: boolean;
+}
+
+/**
  * Create a JSON RPC request client.
  */
 export function createClient<T extends Methods>(
   methods: T,
   send: (
     rpc: JsonRpcRequest<string, unknown> | JsonRpcRequest<string, unknown>[]
-  ) => Promise<unknown>
+  ) => Promise<unknown>,
+  options: ClientOptions = {}
 ) {
   let counter = 0;
   const jsonrpc = "2.0";
@@ -276,26 +288,29 @@ export function createClient<T extends Methods>(
 
     return {
       method,
-      params: request.encode(params),
+      params: options.encode === false ? params : request.encode(params),
       id: async ? undefined : counter++,
       process: (body: unknown): unknown => {
         if (body === undefined) {
           if (async) return undefined;
 
-          throw new RpcError("Invalid response", -1, undefined);
+          return new RpcError("Invalid response", -1, undefined);
         }
 
         if (body === null || typeof body !== "object" || Array.isArray(body)) {
-          throw new RpcError("Invalid response", -1, undefined);
+          return new RpcError("Invalid response", -1, undefined);
         }
 
-        const { result, error } = body as Record<string, unknown>;
+        const { result, error } = body as Record<string, any>;
 
         if (result) {
-          const output = response.decode(result);
+          const output =
+            options.decode === false
+              ? either.right(result)
+              : response.decode(result);
 
           if (either.isLeft(output)) {
-            throw new RpcError(
+            return new RpcError(
               PathReporter.report(output).join("; "),
               -2,
               output.left
@@ -310,11 +325,14 @@ export function createClient<T extends Methods>(
           typeof error !== "object" ||
           Array.isArray(error)
         ) {
-          throw new RpcError("Invalid response", -1, undefined);
+          return new RpcError("Invalid response", -1, undefined);
         }
 
-        const { message, code, data } = error as Record<string, unknown>;
-        throw new RpcError(String(message || "Error"), Number(code) || 0, data);
+        return new RpcError(
+          String(error.message || "Error"),
+          Number(error.code) || 0,
+          error.data
+        );
       }
     };
   }
@@ -326,17 +344,19 @@ export function createClient<T extends Methods>(
   > {
     const { params, id, method, process } = prepare(payload);
     const data = await send({ jsonrpc, method, params, id });
-    return process(data) as any;
+    const response = process(data) as any;
+    if (response instanceof RpcError) throw response; // Throw RPC errors.
+    return response;
   }
 
-  rpcClient.batch = async <U extends ClientMethods<T>[]>(
-    ...payload: U
+  rpcClient.many = async <U extends ClientMethods<T>[]>(
+    payload: U
   ): Promise<
     {
       [K in keyof U]: U[K] extends ClientMethods<T>
         ? U[K]["async"] extends true
           ? undefined
-          : TypeOf<T[U[K]["method"]]["response"]>
+          : TypeOf<T[U[K]["method"]]["response"]> | RpcError
         : U[K];
     }
   > => {
@@ -360,6 +380,10 @@ export function createClient<T extends Methods>(
     // Return items in the order they were sent.
     const lookup = new Map(data.map(data => [data.id, data]));
     return items.map(item => item.process(lookup.get(item.id))) as any;
+  };
+
+  rpcClient.batch = async <U extends ClientMethods<T>[]>(...payload: U) => {
+    return rpcClient.many(payload);
   };
 
   return rpcClient;

@@ -1,6 +1,6 @@
 import * as t from "io-ts";
-import { createServer, parse, createClient } from "./index";
-import { isLeft, isRight, either } from "fp-ts/lib/Either";
+import { createServer, parse, createClient, RpcError } from "./index";
+import { isLeft, isRight } from "fp-ts/lib/Either";
 
 describe("json rpc", () => {
   const methods = {
@@ -291,6 +291,15 @@ describe("json rpc", () => {
 
         expect(result).toEqual(undefined);
       });
+
+      it("should throw rpc errors", async () => {
+        await expect(
+          client({
+            method: "echo",
+            params: {} as any
+          })
+        ).rejects.toBeInstanceOf(RpcError);
+      });
     });
 
     describe("batch", () => {
@@ -320,6 +329,16 @@ describe("json rpc", () => {
         );
 
         expect(result).toEqual([undefined, "test", undefined]);
+      });
+
+      it("should return rpc errors", async () => {
+        const result = await client.batch({
+          method: "echo",
+          params: {} as any
+        });
+
+        expect(result.length).toEqual(1);
+        expect(result[0]).toBeInstanceOf(RpcError);
       });
     });
   });
