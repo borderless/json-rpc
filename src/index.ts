@@ -253,13 +253,21 @@ export function createServer<T extends Methods, C = void>(
 /**
  * Map methods to valid client methods.
  */
-type ClientMethods<T extends Methods> = {
+export type ClientRequests<T extends Methods> = {
   [K in keyof T]: {
     method: K;
     params: TypeOf<T[K]["request"]>;
     async?: boolean;
   };
 }[keyof T & string];
+
+/**
+ * Map client requests to response types.
+ */
+export type ClientResponse<
+  T extends Methods,
+  P extends ClientRequests<T>
+> = P["async"] extends true ? undefined : TypeOf<T[P["method"]]["response"]>;
 
 /**
  * Configure client options.
@@ -283,7 +291,7 @@ export function createClient<T extends Methods, U = void>(
   let counter = 0;
   const jsonrpc = "2.0";
 
-  function prepare<U extends ClientMethods<T>>(payload: U) {
+  function prepare<U extends ClientRequests<T>>(payload: U) {
     const { method, params, async } = payload;
     const { request, response } = methods[method];
 
@@ -334,12 +342,10 @@ export function createClient<T extends Methods, U = void>(
     };
   }
 
-  async function rpcClient<P extends ClientMethods<T>>(
+  async function rpcClient<P extends ClientRequests<T>>(
     payload: P,
     options: U
-  ): Promise<
-    P["async"] extends true ? undefined : TypeOf<T[P["method"]]["response"]>
-  > {
+  ): Promise<ClientResponse<T, P>> {
     const { params, id, method, process } = prepare(payload);
     const data = await send({ jsonrpc, method, params, id }, options);
     const response = process(data) as any;
@@ -347,15 +353,13 @@ export function createClient<T extends Methods, U = void>(
     return response;
   }
 
-  rpcClient.many = async <P extends ClientMethods<T>[]>(
+  rpcClient.many = async <P extends ClientRequests<T>[]>(
     payload: P,
     options: U
   ): Promise<
     {
-      [K in keyof P]: P[K] extends ClientMethods<T>
-        ? P[K]["async"] extends true
-          ? undefined
-          : TypeOf<T[P[K]["method"]]["response"]> | RpcError
+      [K in keyof P]: K extends number
+        ? ClientResponse<T, P[K]> | RpcError
         : P[K];
     }
   > => {

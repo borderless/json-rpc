@@ -1,11 +1,14 @@
 import * as t from "io-ts";
 import { isLeft, isRight } from "fp-ts/lib/Either";
+import { expectType, TypeEqual } from "ts-expect";
 import {
   createServer,
   parse,
   createClient,
   RpcError,
-  Resolvers
+  Resolvers,
+  ClientRequests,
+  ClientResponse
 } from "./index";
 
 describe("json rpc", () => {
@@ -27,6 +30,13 @@ describe("json rpc", () => {
 
   const server = createServer(methods, resolvers);
   const client = createClient(methods, x => server(x, undefined));
+
+  describe("types", () => {
+    type Requests = ClientRequests<typeof methods>;
+    type Responses = ClientResponse<typeof methods, Requests>;
+
+    expectType<TypeEqual<Responses, string>>(true);
+  });
 
   describe("parse", () => {
     it("should parse json", () => {
