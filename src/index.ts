@@ -272,10 +272,11 @@ export interface ClientOptions {
 /**
  * Create a JSON RPC request client.
  */
-export function createClient<T extends Methods>(
+export function createClient<T extends Methods, U = void>(
   methods: T,
   send: (
-    rpc: JsonRpcRequest<string, unknown> | JsonRpcRequest<string, unknown>[]
+    data: JsonRpcRequest<string, unknown> | JsonRpcRequest<string, unknown>[],
+    options: U
   ) => Promise<unknown>,
   options: ClientOptions = {}
 ) {
@@ -303,61 +304,59 @@ export function createClient<T extends Methods>(
 
         const { result, error } = body as Record<string, any>;
 
-        if (result) {
-          const output =
-            options.decode === false
-              ? either.right(result)
-              : response.decode(result);
-
-          if (either.isLeft(output)) {
-            return new RpcError(
-              PathReporter.report(output).join("; "),
-              -2,
-              output.left
-            );
-          }
-
-          return output.right;
-        }
-
-        if (
-          error === null ||
-          typeof error !== "object" ||
-          Array.isArray(error)
-        ) {
+        if (result === undefined && error === undefined) {
           return new RpcError("Invalid response", -1, undefined);
         }
 
-        return new RpcError(
-          String(error.message || "Error"),
-          Number(error.code) || 0,
-          error.data
-        );
+        if (error !== undefined) {
+          return new RpcError(
+            String(error?.message || "Error"),
+            Number(error?.code) || 0,
+            error?.data
+          );
+        }
+
+        const output =
+          options.decode === false
+            ? either.right(result)
+            : response.decode(result);
+
+        if (either.isLeft(output)) {
+          return new RpcError(
+            PathReporter.report(output).join("; "),
+            -2,
+            output.left
+          );
+        }
+
+        return output.right;
       }
     };
   }
 
-  async function rpcClient<U extends ClientMethods<T>>(
-    payload: U
+  async function rpcClient<P extends ClientMethods<T>>(
+    payload: P,
+    options: U
   ): Promise<
-    U["async"] extends true ? undefined : TypeOf<T[U["method"]]["response"]>
+    P["async"] extends true ? undefined : TypeOf<T[P["method"]]["response"]>
   > {
     const { params, id, method, process } = prepare(payload);
-    const data = await send({ jsonrpc, method, params, id });
+    const data = await send({ jsonrpc, method, params, id }, options);
     const response = process(data) as any;
     if (response instanceof RpcError) throw response; // Throw RPC errors.
     return response;
   }
 
-  rpcClient.many = async <U extends ClientMethods<T>[]>(
-    payload: U
+  rpcClient.many = async <P extends ClientMethods<T>[]>(
+    payload: P,
+    options: U
   ): Promise<
     {
-      [K in keyof U]: U[K] extends ClientMethods<T>
-        ? U[K]["async"] extends true
+      [K in keyof P]: P[K] extends ClientMethods<T>
+        ? P[K]["async"] extends true
           ? undefined
-          : TypeOf<T[U[K]["method"]]["response"]> | RpcError
-        : U[K];
+          : TypeOf<T[P[K]["method"]]["response"]> | RpcError
+        : P[K];
     }
   > => {
     const items = payload.map(prepare);
@@ -370,7 +369,8 @@ export function createClient<T extends Methods>(
           params,
           id
         })
-      )
+      ),
+      options
     );
 
     if (!Array.isArray(data)) {
@@ -380,10 +380,6 @@ export function createClient<T extends Methods>(
     // Return items in the order they were sent.
     const lookup = new Map(data.map(data => [data.id, data]));
     return items.map(item => item.process(lookup.get(item.id))) as any;
-  };
-
-  rpcClient.batch = async <U extends ClientMethods<T>[]>(...payload: U) => {
-    return rpcClient.many(payload);
   };
 
   return rpcClient;

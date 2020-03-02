@@ -1,6 +1,12 @@
 import * as t from "io-ts";
-import { createServer, parse, createClient, RpcError } from "./index";
 import { isLeft, isRight } from "fp-ts/lib/Either";
+import {
+  createServer,
+  parse,
+  createClient,
+  RpcError,
+  Resolvers
+} from "./index";
 
 describe("json rpc", () => {
   const methods = {
@@ -14,11 +20,12 @@ describe("json rpc", () => {
     }
   };
 
-  const server = createServer(methods, {
+  const resolvers: Resolvers<typeof methods> = {
     hello: _ => "Hello World!",
     echo: ({ arg }) => arg
-  });
+  };
 
+  const server = createServer(methods, resolvers);
   const client = createClient(methods, x => server(x, undefined));
 
   describe("parse", () => {
@@ -271,6 +278,28 @@ describe("json rpc", () => {
           }
         });
       });
+
+      describe("without type checking", () => {
+        const server = createServer(methods, resolvers, {
+          encode: false,
+          decode: false
+        });
+
+        it("should succeed", async () => {
+          const result = await server({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "hello",
+            params: {}
+          });
+
+          expect(result).toEqual({
+            jsonrpc: "2.0",
+            id: 1,
+            result: "Hello World!"
+          });
+        });
+      });
     });
   });
 
@@ -300,42 +329,69 @@ describe("json rpc", () => {
           })
         ).rejects.toBeInstanceOf(RpcError);
       });
+
+      describe("without type checking", () => {
+        const client = createClient(methods, x => server(x), {
+          encode: false,
+          decode: false
+        });
+
+        it("should succeed", async () => {
+          const result = await client({ method: "hello", params: {} });
+
+          expect(result).toEqual("Hello World!");
+        });
+      });
+
+      describe("with send options", () => {
+        const client = createClient(methods, (_, options: string) =>
+          Promise.resolve({ result: options })
+        );
+
+        it("should accept options", async () => {
+          const result = await client({ method: "hello", params: {} }, "Test");
+
+          expect(result).toEqual("Test");
+        });
+      });
     });
 
-    describe("batch", () => {
-      it("should make a batch request", async () => {
-        const result = await client.batch(
+    describe("many", () => {
+      it("should make a many request", async () => {
+        const result = await client.many([
           { method: "hello", params: {} },
           { method: "echo", params: { arg: "test" } }
-        );
+        ]);
 
         expect(result).toEqual(["Hello World!", "test"]);
       });
 
-      it("should make a batch notification request", async () => {
-        const result = await client.batch(
+      it("should make a many notification request", async () => {
+        const result = await client.many([
           { method: "hello", params: {}, async: true },
           { method: "echo", params: { arg: "test" }, async: true }
-        );
+        ]);
 
         expect(result).toEqual([undefined, undefined]);
       });
 
-      it("should handle mixed batch responses", async () => {
-        const result = await client.batch(
+      it("should handle mixed many responses", async () => {
+        const result = await client.many([
           { method: "hello", params: {}, async: true },
           { method: "echo", params: { arg: "test" } },
           { method: "hello", params: {}, async: true }
-        );
+        ]);
 
         expect(result).toEqual([undefined, "test", undefined]);
       });
 
       it("should return rpc errors", async () => {
-        const result = await client.batch({
-          method: "echo",
-          params: {} as any
-        });
+        const result = await client.many([
+          {
+            method: "echo",
+            params: {} as any
+          }
+        ]);
 
         expect(result.length).toEqual(1);
         expect(result[0]).toBeInstanceOf(RpcError);
