@@ -84,7 +84,7 @@ const result = await client({
   params: {}
 }); //=> "Hello World!"
 
-const results = await client.batch(
+const results = await client.many([
   {
     method: "hello",
     params: {}
@@ -93,7 +93,7 @@ const results = await client.batch(
     method: "echo",
     params: { arg: "Test" }
   }
-); //=> ["Hello World!", "Test"]
+]); //=> ["Hello World!", "Test"]
 ```
 
 ## License
