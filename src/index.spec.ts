@@ -1,6 +1,7 @@
+import * as t from "io-ts";
+import { isLeft, isRight } from "fp-ts/lib/Either";
 import { expectType, TypeEqual } from "ts-expect";
 import {
-  schema,
   createServer,
   parse,
   createClient,
@@ -13,12 +14,12 @@ import {
 describe("json rpc", () => {
   const methods = {
     hello: {
-      request: schema.object({}),
-      response: schema.string()
+      request: t.undefined,
+      response: t.string
     },
     echo: {
-      request: schema.object({ arg: schema.string() }),
-      response: schema.string()
+      request: t.type({ arg: t.string }),
+      response: t.string
     }
   };
 
@@ -28,7 +29,7 @@ describe("json rpc", () => {
   };
 
   const server = createServer(methods, resolvers);
-  const client = createClient(methods, server);
+  const client = createClient(methods, x => server(x, undefined));
 
   describe("types", () => {
     type Requests = ClientRequests<typeof methods>;
@@ -39,11 +40,23 @@ describe("json rpc", () => {
 
   describe("parse", () => {
     it("should parse json", () => {
-      expect(parse("{}")).toEqual({});
+      const result = parse("{}");
+
+      expect(isRight(result)).toEqual(true);
+
+      if (isRight(result)) {
+        expect(result.right).toEqual({});
+      }
     });
 
     it("should fail to parse malformed json", () => {
-      expect(() => parse("[")).toThrow(SyntaxError);
+      const result = parse("[");
+
+      expect(isLeft(result)).toEqual(true);
+
+      if (isLeft(result)) {
+        expect(result.left).toEqual({ code: -32700, message: "Parse error" });
+      }
     });
   });
 
@@ -219,7 +232,7 @@ describe("json rpc", () => {
           id: "test",
           error: {
             code: -32602,
-            message: "arg: Non-string type: undefined"
+            message: "Invalid value undefined supplied to : { arg: string }"
           }
         });
       });
@@ -236,26 +249,8 @@ describe("json rpc", () => {
           jsonrpc: "2.0",
           id: "test",
           error: {
-            code: -32600,
-            message: "Invalid request"
-          }
-        });
-      });
-
-      it("should fail on invalid parameters", async () => {
-        const res = await server({
-          jsonrpc: "2.0",
-          id: "test",
-          method: "echo",
-          params: "test"
-        });
-
-        expect(res).toEqual({
-          jsonrpc: "2.0",
-          id: "test",
-          error: {
-            code: -32600,
-            message: "Invalid request"
+            code: -32602,
+            message: 'Invalid value "test" supplied to : { arg: string }'
           }
         });
       });
@@ -287,7 +282,7 @@ describe("json rpc", () => {
   describe("client", () => {
     describe("request", () => {
       it("should make a request", async () => {
-        const result = await client({ method: "hello", params: {} });
+        const result = await client({ method: "hello", params: undefined });
 
         expect(result).toEqual("Hello World!");
       });
@@ -295,20 +290,20 @@ describe("json rpc", () => {
       it("should make a notification request", async () => {
         const result = await client({
           method: "hello",
-          params: {},
+          params: undefined,
           async: true
         });
 
         expect(result).toEqual(undefined);
       });
 
-      it("should throw on invalid argument", async () => {
+      it("should throw rpc errors", async () => {
         await expect(
           client({
             method: "echo",
             params: {} as any
           })
-        ).rejects.toBeInstanceOf(Error);
+        ).rejects.toBeInstanceOf(RpcError);
       });
 
       describe("without type checking", () => {
@@ -318,7 +313,7 @@ describe("json rpc", () => {
         });
 
         it("should succeed", async () => {
-          const result = await client({ method: "hello", params: {} });
+          const result = await client({ method: "hello", params: undefined });
 
           expect(result).toEqual("Hello World!");
         });
@@ -330,7 +325,10 @@ describe("json rpc", () => {
         );
 
         it("should accept options", async () => {
-          const result = await client({ method: "hello", params: {} }, "Test");
+          const result = await client(
+            { method: "hello", params: undefined },
+            "Test"
+          );
 
           expect(result).toEqual("Test");
         });
@@ -340,7 +338,7 @@ describe("json rpc", () => {
     describe("many", () => {
       it("should make a many request", async () => {
         const result = await client.many([
-          { method: "hello", params: {} },
+          { method: "hello", params: undefined },
           { method: "echo", params: { arg: "test" } }
         ]);
 
@@ -349,7 +347,7 @@ describe("json rpc", () => {
 
       it("should make a many notification request", async () => {
         const result = await client.many([
-          { method: "hello", params: {}, async: true },
+          { method: "hello", params: undefined, async: true },
           { method: "echo", params: { arg: "test" }, async: true }
         ]);
 
@@ -358,23 +356,24 @@ describe("json rpc", () => {
 
       it("should handle mixed many responses", async () => {
         const result = await client.many([
-          { method: "hello", params: {}, async: true },
+          { method: "hello", params: undefined, async: true },
           { method: "echo", params: { arg: "test" } },
-          { method: "hello", params: {}, async: true }
+          { method: "hello", params: undefined, async: true }
         ]);
 
         expect(result).toEqual([undefined, "test", undefined]);
       });
 
-      it("should throw on invalid argument", async () => {
-        expect(
-          client.many([
-            {
-              method: "echo",
-              params: {} as any
-            }
-          ])
-        ).rejects.toBeInstanceOf(Error);
+      it("should return rpc errors", async () => {
+        const result = await client.many([
+          {
+            method: "echo",
+            params: {} as any
+          }
+        ]);
+
+        expect(result.length).toEqual(1);
+        expect(result[0]).toBeInstanceOf(RpcError);
       });
     });
   });
@@ -382,11 +381,11 @@ describe("json rpc", () => {
   describe("intersection types", () => {
     const methods = {
       test: {
-        request: schema.intersection(
-          schema.object({ url: schema.string() }),
-          schema.object({ accept: schema.string().optional() })
-        ),
-        response: schema.string()
+        request: t.intersection([
+          t.type({ url: t.string }),
+          t.partial({ accept: t.string })
+        ]),
+        response: t.string
       }
     };
 

@@ -1,14 +1,14 @@
-import { TypeOf, ZodAny } from "zod";
-import * as schema from "zod";
+import { BaseError } from "make-error";
+import { TypeOf, Any } from "io-ts";
+import { PathReporter } from "io-ts/lib/PathReporter";
+import { either } from "fp-ts";
 
-export { schema };
-
-export interface Method<T extends ZodAny, U extends ZodAny> {
+export interface Method<T extends Any, U extends Any> {
   request: T;
   response: U;
 }
 
-export type Methods = Record<string, Method<ZodAny, ZodAny>>;
+export type Methods = Record<string, Method<Any, Any>>;
 
 /**
  * Metadata for JSON-RPC requests.
@@ -87,23 +87,19 @@ export interface JsonRpcFailure<T> extends JsonRpcResponse {
 // Define commonly used failure messages.
 const INVALID_REQUEST = { code: -32600, message: "Invalid request" };
 const METHOD_NOT_FOUND = { code: -32601, message: "Method not found" };
+const PARSE_ERROR = { code: -32700, message: "Parse error" };
 
 /**
  * Parse raw input into JSON.
  */
-export function parse(input: string): unknown {
-  try {
-    return JSON.parse(input);
-  } catch (err) {
-    err.code = -32700;
-    throw err;
-  }
+export function parse(input: string): either.Either<JsonRpcError, unknown> {
+  return either.parseJSON(input, () => PARSE_ERROR);
 }
 
 /**
  * Create a custom RPC error to report issues.
  */
-export class RpcError<T = void> extends Error {
+export class RpcError<T = void> extends BaseError {
   constructor(public message: string, public code = -32603, public data: T) {
     super(message);
   }
@@ -167,24 +163,15 @@ async function processRequest<T extends Methods, C = void>(
     return failure(METHOD_NOT_FOUND, id);
   }
 
-  let data = undefined;
   const { request, response } = methods[method];
+  const input =
+    options.decode === false ? either.right(params) : request.decode(params);
 
-  if (params === undefined || typeof params === "object") {
-    data = params ?? {};
-  } else {
-    return failure(INVALID_REQUEST, id);
-  }
-
-  let input: unknown;
-
-  try {
-    input = options.decode === false ? data : request.parse(data);
-  } catch (err) {
+  if (either.isLeft(input)) {
     return failure(
       {
         code: -32602,
-        message: err.message
+        message: PathReporter.report(input).join("; ")
       },
       id
     );
@@ -194,9 +181,9 @@ async function processRequest<T extends Methods, C = void>(
   const metadata: Metadata = { id, isNotification };
 
   try {
-    const data = await resolvers[method](input, context, metadata);
+    const data = await resolvers[method](input.right, context, metadata);
     if (isNotification) return; // Do not encode response for notifications.
-    return success(options.encode === false ? data : response.parse(data), id);
+    return success(options.encode === false ? data : response.encode(data), id);
   } catch (err) {
     return failure(
       {
@@ -297,7 +284,7 @@ export function createClient<T extends Methods, U = void>(
 
     return {
       method,
-      params: options.encode === false ? params : request.parse(params),
+      params: options.encode === false ? params : request.encode(params),
       id: async ? undefined : counter++,
       process: (body: unknown): unknown => {
         if (body === undefined) {
@@ -324,11 +311,20 @@ export function createClient<T extends Methods, U = void>(
           );
         }
 
-        try {
-          return response.parse(result);
-        } catch (err) {
-          return new RpcError(err.message, -2, { result });
+        const output =
+          options.decode === false
+            ? either.right(result)
+            : response.decode(result);
+
+        if (either.isLeft(output)) {
+          return new RpcError(
+            PathReporter.report(output).join("; "),
+            -2,
+            output.left
+          );
         }
+
+        return output.right;
       }
     };
   }
