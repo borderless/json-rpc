@@ -63,10 +63,7 @@
     }
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,css,md,yml,yaml}": [
-      "npm run prettier",
-      "git add"
-    ]
+    "*.{js,jsx,ts,tsx,json,css,md,yml,yaml}": "npm run prettier"
   },
   "publishConfig": {
     "access": "public"
@@ -75,20 +72,20 @@
     "node": ">=10"
   },
   "devDependencies": {
-    "@types/jest": "^24.0.11",
+    "@types/jest": "^25.1.4",
     "@types/node": "^13.1.2",
     "@typescript-eslint/eslint-plugin": "^2.14.0",
     "@typescript-eslint/parser": "^2.14.0",
     "eslint": "^6.8.0",
     "eslint-config-prettier": "^6.9.0",
     "eslint-plugin-prettier": "^3.1.2",
-    "husky": "^3.0.0",
-    "jest": "^24.9.0",
-    "lint-staged": "^9.2.0",
+    "husky": "^4.2.3",
+    "jest": "^25.1.0",
+    "lint-staged": "^10.0.8",
     "prettier": "^1.19.1",
     "rimraf": "^3.0.0",
     "ts-expect": "^1.1.0",
-    "ts-jest": "^24.0.2",
+    "ts-jest": "^25.2.1",
     "typescript": "^3.7.4"
   },
   "dependencies": {
