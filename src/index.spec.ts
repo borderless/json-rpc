@@ -1,7 +1,6 @@
-import * as t from "io-ts";
-import { isLeft, isRight } from "fp-ts/lib/Either";
 import { expectType, TypeEqual } from "ts-expect";
 import {
+  schema,
   createServer,
   parse,
   createClient,
@@ -14,12 +13,12 @@ import {
 describe("json rpc", () => {
   const methods = {
     hello: {
-      request: t.type({}),
-      response: t.string
+      request: schema.object({}),
+      response: schema.string()
     },
     echo: {
-      request: t.type({ arg: t.string }),
-      response: t.string
+      request: schema.object({ arg: schema.string() }),
+      response: schema.string()
     }
   };
 
@@ -29,7 +28,7 @@ describe("json rpc", () => {
   };
 
   const server = createServer(methods, resolvers);
-  const client = createClient(methods, x => server(x, undefined));
+  const client = createClient(methods, server);
 
   describe("types", () => {
     type Requests = ClientRequests<typeof methods>;
@@ -40,23 +39,11 @@ describe("json rpc", () => {
 
   describe("parse", () => {
     it("should parse json", () => {
-      const result = parse("{}");
-
-      expect(isRight(result)).toEqual(true);
-
-      if (isRight(result)) {
-        expect(result.right).toEqual({});
-      }
+      expect(parse("{}")).toEqual({});
     });
 
     it("should fail to parse malformed json", () => {
-      const result = parse("[");
-
-      expect(isLeft(result)).toEqual(true);
-
-      if (isLeft(result)) {
-        expect(result.left).toEqual({ code: -32700, message: "Parse error" });
-      }
+      expect(() => parse("[")).toThrow(SyntaxError);
     });
   });
 
@@ -83,21 +70,6 @@ describe("json rpc", () => {
         });
 
         expect(res).toEqual(undefined);
-      });
-
-      it("should accept an array of parameters", async () => {
-        const res = await server({
-          jsonrpc: "2.0",
-          id: "test",
-          method: "echo",
-          params: ["test"]
-        });
-
-        expect(res).toEqual({
-          jsonrpc: "2.0",
-          id: "test",
-          result: "test"
-        });
       });
 
       it("should accept an object of parameters", async () => {
@@ -247,8 +219,7 @@ describe("json rpc", () => {
           id: "test",
           error: {
             code: -32602,
-            message:
-              "Invalid value undefined supplied to : { arg: string }/arg: string"
+            message: "arg: Non-string type: undefined"
           }
         });
       });
@@ -331,13 +302,13 @@ describe("json rpc", () => {
         expect(result).toEqual(undefined);
       });
 
-      it("should throw rpc errors", async () => {
+      it("should throw on invalid argument", async () => {
         await expect(
           client({
             method: "echo",
             params: {} as any
           })
-        ).rejects.toBeInstanceOf(RpcError);
+        ).rejects.toBeInstanceOf(Error);
       });
 
       describe("without type checking", () => {
@@ -395,17 +366,52 @@ describe("json rpc", () => {
         expect(result).toEqual([undefined, "test", undefined]);
       });
 
-      it("should return rpc errors", async () => {
-        const result = await client.many([
-          {
-            method: "echo",
-            params: {} as any
-          }
-        ]);
-
-        expect(result.length).toEqual(1);
-        expect(result[0]).toBeInstanceOf(RpcError);
+      it("should throw on invalid argument", async () => {
+        expect(
+          client.many([
+            {
+              method: "echo",
+              params: {} as any
+            }
+          ])
+        ).rejects.toBeInstanceOf(Error);
       });
+    });
+  });
+
+  describe("intersection types", () => {
+    const methods = {
+      test: {
+        request: schema.intersection(
+          schema.object({ url: schema.string() }),
+          schema.object({ accept: schema.string().optional() })
+        ),
+        response: schema.string()
+      }
+    };
+
+    const server = createServer(methods, {
+      test: ({ url, accept }) => `${url}#${accept}`
+    });
+
+    const client = createClient(methods, server);
+
+    it("should support intersection types", async () => {
+      const result = await client({
+        method: "test",
+        params: { url: "http://example.com", accept: "json" }
+      });
+
+      expect(result).toEqual(`http://example.com#json`);
+    });
+
+    it("should support intersection type with optional key", async () => {
+      const result = await client({
+        method: "test",
+        params: { url: "http://example.com" }
+      });
+
+      expect(result).toEqual(`http://example.com#undefined`);
     });
   });
 });

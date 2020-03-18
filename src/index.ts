@@ -1,14 +1,14 @@
-import { BaseError } from "make-error";
-import { TypeOf, Any, TypeC } from "io-ts";
-import { PathReporter } from "io-ts/lib/PathReporter";
-import { either } from "fp-ts";
+import { TypeOf, ZodAny } from "zod";
+import * as schema from "zod";
 
-export interface Method<T extends TypeC<any>, U extends Any> {
+export { schema };
+
+export interface Method<T extends ZodAny, U extends ZodAny> {
   request: T;
   response: U;
 }
 
-export type Methods = Record<string, Method<TypeC<any>, Any>>;
+export type Methods = Record<string, Method<ZodAny, ZodAny>>;
 
 /**
  * Metadata for JSON-RPC requests.
@@ -87,19 +87,23 @@ export interface JsonRpcFailure<T> extends JsonRpcResponse {
 // Define commonly used failure messages.
 const INVALID_REQUEST = { code: -32600, message: "Invalid request" };
 const METHOD_NOT_FOUND = { code: -32601, message: "Method not found" };
-const PARSE_ERROR = { code: -32700, message: "Parse error" };
 
 /**
  * Parse raw input into JSON.
  */
-export function parse(input: string): either.Either<JsonRpcError, unknown> {
-  return either.parseJSON(input, () => PARSE_ERROR);
+export function parse(input: string): unknown {
+  try {
+    return JSON.parse(input);
+  } catch (err) {
+    err.code = -32700;
+    throw err;
+  }
 }
 
 /**
  * Create a custom RPC error to report issues.
  */
-export class RpcError<T = void> extends BaseError {
+export class RpcError<T = void> extends Error {
   constructor(public message: string, public code = -32603, public data: T) {
     super(message);
   }
@@ -166,25 +170,21 @@ async function processRequest<T extends Methods, C = void>(
   let data = undefined;
   const { request, response } = methods[method];
 
-  if (Array.isArray(params)) {
-    data = Object.keys(request.props).reduce<any>((obj, key, index) => {
-      obj[key] = params[index];
-      return obj;
-    }, {});
-  } else if (params === undefined || typeof params === "object") {
+  if (params === undefined || typeof params === "object") {
     data = params ?? {};
   } else {
     return failure(INVALID_REQUEST, id);
   }
 
-  const input =
-    options.decode === false ? either.right(data) : request.decode(data);
+  let input: unknown;
 
-  if (either.isLeft(input)) {
+  try {
+    input = options.decode === false ? data : request.parse(data);
+  } catch (err) {
     return failure(
       {
         code: -32602,
-        message: PathReporter.report(input).join("; ")
+        message: err.message
       },
       id
     );
@@ -194,9 +194,9 @@ async function processRequest<T extends Methods, C = void>(
   const metadata: Metadata = { id, isNotification };
 
   try {
-    const data = await resolvers[method](input.right, context, metadata);
+    const data = await resolvers[method](input, context, metadata);
     if (isNotification) return; // Do not encode response for notifications.
-    return success(options.encode === false ? data : response.encode(data), id);
+    return success(options.encode === false ? data : response.parse(data), id);
   } catch (err) {
     return failure(
       {
@@ -297,7 +297,7 @@ export function createClient<T extends Methods, U = void>(
 
     return {
       method,
-      params: options.encode === false ? params : request.encode(params),
+      params: options.encode === false ? params : request.parse(params),
       id: async ? undefined : counter++,
       process: (body: unknown): unknown => {
         if (body === undefined) {
@@ -324,20 +324,11 @@ export function createClient<T extends Methods, U = void>(
           );
         }
 
-        const output =
-          options.decode === false
-            ? either.right(result)
-            : response.decode(result);
-
-        if (either.isLeft(output)) {
-          return new RpcError(
-            PathReporter.report(output).join("; "),
-            -2,
-            output.left
-          );
+        try {
+          return response.parse(result);
+        } catch (err) {
+          return new RpcError(err.message, -2, { result });
         }
-
-        return output.right;
       }
     };
   }
