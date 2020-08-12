@@ -5,15 +5,14 @@
 [![Build status][travis-image]][travis-url]
 [![Test coverage][coveralls-image]][coveralls-url]
 
-> Tiny, type-safe [JSON-RPC 2.0](https://www.jsonrpc.org/specification) implementation.
+> Tiny, mostly compliant [JSON-RPC 2.0](https://www.jsonrpc.org/specification) implementation.
+
+This package intentionally doesn't implement the "arguments" form of request parameters. This is when the input `params` can be an object or an ordered array representing the object. Instead, you can pass _any_ JSON params over the wire.
 
 ## Installation
 
 ```sh
 npm install @borderlesslabs/json-rpc --save
-
-# Peer dependencies.
-npm install io-ts fp-ts --save
 ```
 
 ## Usage
@@ -22,33 +21,27 @@ This package makes no assumptions about the transportation layer, for client or 
 
 ### Methods
 
-The methods definition uses [`io-ts`](https://github.com/gcanti/io-ts) to encode and decode requests or responses.
-
 ```ts
-import * as t from "io-ts";
-
-const methods = {
+type Methods = {
   hello: {
-    // `request` is required, even when empty.
-    request: t.type({}),
-    response: t.string
-  },
+    request: {};
+    response: string;
+  };
   echo: {
-    // Specify `request` parameters as keys of the object.
-    request: t.type({ arg: t.string }),
-    response: t.string
-  }
+    request: { arg: string };
+    response: string;
+  };
 };
 ```
 
 ### Server
 
-The server takes the methods and a dictionary of matching resolvers.
+The server accepts a dictionary of resolvers.
 
 ```ts
 import { createClient } from "@borderlesslabs/json-rpc";
 
-const server = createServer(methods, {
+const server = createServer<Methods>({
   hello: _ => "Hello World!",
   echo: ({ arg }) => arg
 });
@@ -62,15 +55,15 @@ const res = await server({
 
 ### Client
 
-The client takes the methods and a function to `send` the JSON-RPC request.
+The client accepts a function to `send` the JSON-RPC request.
 
 ```ts
 import { createClient } from "@borderlesslabs/json-rpc";
 
-const client = createClient(methods, async x => {
+const client = createClient(async payload => {
   const res = await fetch("...", {
     method: "POST",
-    body: JSON.stringify(x),
+    body: JSON.stringify(payload),
     headers: {
       "Content-Type": "application/json"
     }

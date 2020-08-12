@@ -79,9 +79,7 @@
     "eslint": "^6.8.0",
     "eslint-config-prettier": "^6.9.0",
     "eslint-plugin-prettier": "^3.1.2",
-    "fp-ts": "^2.4.0",
     "husky": "^4.2.3",
-    "io-ts": "^2.0.4",
     "jest": "^25.1.0",
     "lint-staged": "^10.0.8",
     "prettier": "^1.19.1",
@@ -89,9 +87,5 @@
     "ts-expect": "^1.1.0",
     "ts-jest": "^25.2.1",
     "typescript": "^3.7.4"
-  },
-  "peerDependencies": {
-    "io-ts": "^2.0.4",
-    "fp-ts": "^2.4.0"
   }
 }
