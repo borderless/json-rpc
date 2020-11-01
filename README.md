@@ -39,7 +39,7 @@ type Methods = {
 The server accepts a dictionary of resolvers.
 
 ```ts
-import { createClient } from "@borderlesslabs/json-rpc";
+import { createServer } from "@borderlesslabs/json-rpc";
 
 const server = createServer<Methods>({
   hello: _ => "Hello World!",
