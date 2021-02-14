@@ -1,6 +1,6 @@
 {
   "name": "@borderless/json-rpc",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Tiny, type-safe JSON-RPC 2.0 implementation",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
