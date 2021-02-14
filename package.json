@@ -1,5 +1,5 @@
 {
-  "name": "@borderlesslabs/json-rpc",
+  "name": "@borderless/json-rpc",
   "version": "3.0.0",
   "description": "Tiny, type-safe JSON-RPC 2.0 implementation",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/BorderlessLabs/json-rpc.git"
+    "url": "git://github.com/borderless/json-rpc.git"
   },
   "keywords": [
     "json",
@@ -38,9 +38,9 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/BorderlessLabs/json-rpc/issues"
+    "url": "https://github.com/borderless/json-rpc/issues"
   },
-  "homepage": "https://github.com/BorderlessLabs/json-rpc",
+  "homepage": "https://github.com/borderless/json-rpc",
   "jest": {
     "roots": [
       "<rootDir>/src/"

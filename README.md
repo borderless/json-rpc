@@ -12,7 +12,7 @@ This package intentionally doesn't implement the "arguments" form of request par
 ## Installation
 
 ```sh
-npm install @borderlesslabs/json-rpc --save
+npm install @borderless/json-rpc --save
 ```
 
 ## Usage
@@ -39,7 +39,7 @@ type Methods = {
 The server accepts a dictionary of resolvers.
 
 ```ts
-import { createServer } from "@borderlesslabs/json-rpc";
+import { createServer } from "@borderless/json-rpc";
 
 const server = createServer<Methods>({
   hello: _ => "Hello World!",
@@ -58,7 +58,7 @@ const res = await server({
 The client accepts a function to `send` the JSON-RPC request.
 
 ```ts
-import { createClient } from "@borderlesslabs/json-rpc";
+import { createClient } from "@borderless/json-rpc";
 
 const client = createClient(async payload => {
   const res = await fetch("...", {
@@ -93,11 +93,11 @@ const results = await client.many([
 
 MIT
 
-[npm-image]: https://img.shields.io/npm/v/@borderlesslabs/json-rpc.svg?style=flat
-[npm-url]: https://npmjs.org/package/@borderlesslabs/json-rpc
-[downloads-image]: https://img.shields.io/npm/dm/@borderlesslabs/json-rpc.svg?style=flat
-[downloads-url]: https://npmjs.org/package/@borderlesslabs/json-rpc
-[travis-image]: https://img.shields.io/travis/BorderlessLabs/json-rpc.svg?style=flat
-[travis-url]: https://travis-ci.org/BorderlessLabs/json-rpc
-[coveralls-image]: https://img.shields.io/coveralls/BorderlessLabs/json-rpc.svg?style=flat
-[coveralls-url]: https://coveralls.io/r/BorderlessLabs/json-rpc?branch=master
+[npm-image]: https://img.shields.io/npm/v/@borderless/json-rpc.svg?style=flat
+[npm-url]: https://npmjs.org/package/@borderless/json-rpc
+[downloads-image]: https://img.shields.io/npm/dm/@borderless/json-rpc.svg?style=flat
+[downloads-url]: https://npmjs.org/package/@borderless/json-rpc
+[travis-image]: https://img.shields.io/travis/borderless/json-rpc.svg?style=flat
+[travis-url]: https://travis-ci.org/borderless/json-rpc
+[coveralls-image]: https://img.shields.io/coveralls/borderless/json-rpc.svg?style=flat
+[coveralls-url]: https://coveralls.io/r/borderless/json-rpc?branch=master
