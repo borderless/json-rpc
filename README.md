@@ -42,14 +42,14 @@ The server accepts a dictionary of resolvers.
 import { createServer } from "@borderless/json-rpc";
 
 const server = createServer<Methods>({
-  hello: _ => "Hello World!",
-  echo: ({ arg }) => arg
+  hello: (_) => "Hello World!",
+  echo: ({ arg }) => arg,
 });
 
 const res = await server({
   jsonrpc: "2.0",
   id: "test",
-  method: "hello"
+  method: "hello",
 }); //=> { jsonrpc: "2.0", id: "test", result: "Hello World!" }
 ```
 
@@ -60,13 +60,13 @@ The client accepts a function to `send` the JSON-RPC request.
 ```ts
 import { createClient } from "@borderless/json-rpc";
 
-const client = createClient(async payload => {
+const client = createClient(async (payload) => {
   const res = await fetch("...", {
     method: "POST",
     body: JSON.stringify(payload),
     headers: {
-      "Content-Type": "application/json"
-    }
+      "Content-Type": "application/json",
+    },
   });
 
   return res.json();
@@ -74,18 +74,18 @@ const client = createClient(async payload => {
 
 const result = await client({
   method: "hello",
-  params: {}
+  params: {},
 }); //=> "Hello World!"
 
 const results = await client.many([
   {
     method: "hello",
-    params: {}
+    params: {},
   },
   {
     method: "echo",
-    params: { arg: "Test" }
-  }
+    params: { arg: "Test" },
+  },
 ]); //=> ["Hello World!", "Test"]
 ```
 

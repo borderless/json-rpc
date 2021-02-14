@@ -6,7 +6,7 @@ import {
   RpcError,
   Resolvers,
   ClientRequest,
-  ClientResponse
+  ClientResponse,
 } from "./index";
 
 describe("json rpc", () => {
@@ -22,12 +22,12 @@ describe("json rpc", () => {
   };
 
   const resolvers: Resolvers<Methods> = {
-    hello: _ => "Hello World!",
-    echo: ({ arg }) => arg
+    hello: () => "Hello World!",
+    echo: ({ arg }) => arg,
   };
 
   const server = createServer(resolvers);
-  const client = createClient(x => server(x, undefined));
+  const client = createClient((x) => server(x, undefined));
 
   describe("types", () => {
     type Requests = ClientRequest<Methods>;
@@ -52,20 +52,20 @@ describe("json rpc", () => {
         const res = await server({
           jsonrpc: "2.0",
           id: "test",
-          method: "hello"
+          method: "hello",
         });
 
         expect(res).toEqual({
           jsonrpc: "2.0",
           id: "test",
-          result: "Hello World!"
+          result: "Hello World!",
         });
       });
 
       it("should not respond to notification", async () => {
         const res = await server({
           jsonrpc: "2.0",
-          method: "hello"
+          method: "hello",
         });
 
         expect(res).toEqual(undefined);
@@ -76,13 +76,13 @@ describe("json rpc", () => {
           jsonrpc: "2.0",
           id: "test",
           method: "echo",
-          params: { arg: "test" }
+          params: { arg: "test" },
         });
 
         expect(res).toEqual({
           jsonrpc: "2.0",
           id: "test",
-          result: "test"
+          result: "test",
         });
       });
     });
@@ -93,26 +93,26 @@ describe("json rpc", () => {
           {
             jsonrpc: "2.0",
             id: 1,
-            method: "hello"
+            method: "hello",
           },
           {
             jsonrpc: "2.0",
             id: 2,
-            method: "hello"
-          }
+            method: "hello",
+          },
         ]);
 
         expect(res).toEqual([
           {
             jsonrpc: "2.0",
             id: 1,
-            result: "Hello World!"
+            result: "Hello World!",
           },
           {
             jsonrpc: "2.0",
             id: 2,
-            result: "Hello World!"
-          }
+            result: "Hello World!",
+          },
         ]);
       });
     });
@@ -126,8 +126,8 @@ describe("json rpc", () => {
           id: null,
           error: {
             code: -32600,
-            message: "Invalid request"
-          }
+            message: "Invalid request",
+          },
         });
       });
 
@@ -139,8 +139,8 @@ describe("json rpc", () => {
           id: null,
           error: {
             code: -32600,
-            message: "Invalid request"
-          }
+            message: "Invalid request",
+          },
         });
       });
 
@@ -152,15 +152,15 @@ describe("json rpc", () => {
           id: null,
           error: {
             code: -32600,
-            message: "Invalid request"
-          }
+            message: "Invalid request",
+          },
         });
       });
 
       it("should fail on invalid request rpc id", async () => {
         const res = await server({
           jsonrpc: "2.0",
-          id: {}
+          id: {},
         });
 
         expect(res).toEqual({
@@ -168,15 +168,15 @@ describe("json rpc", () => {
           id: null,
           error: {
             code: -32600,
-            message: "Invalid request"
-          }
+            message: "Invalid request",
+          },
         });
       });
 
       it("should fail on fractional numeric request rpc id", async () => {
         const res = await server({
           jsonrpc: "2.0",
-          id: 123.5
+          id: 123.5,
         });
 
         expect(res).toEqual({
@@ -184,8 +184,8 @@ describe("json rpc", () => {
           id: null,
           error: {
             code: -32600,
-            message: "Invalid request"
-          }
+            message: "Invalid request",
+          },
         });
       });
 
@@ -193,7 +193,7 @@ describe("json rpc", () => {
         const res = await server({
           jsonrpc: "2.0",
           id: "test",
-          method: "missing"
+          method: "missing",
         });
 
         expect(res).toEqual({
@@ -201,8 +201,8 @@ describe("json rpc", () => {
           id: "test",
           error: {
             code: -32601,
-            message: "Method not found"
-          }
+            message: "Method not found",
+          },
         });
       });
     });
@@ -220,7 +220,7 @@ describe("json rpc", () => {
         const result = await client({
           method: "hello",
           params: undefined,
-          async: true
+          async: true,
         });
 
         expect(result).toEqual(undefined);
@@ -230,14 +230,14 @@ describe("json rpc", () => {
         await expect(
           client({
             method: "echo",
-            params: {} as any
+            params: {} as any,
           })
         ).rejects.toBeInstanceOf(RpcError);
       });
 
       describe("with send context", () => {
         const client = createClient(async (_, context: string) => ({
-          result: context
+          result: context,
         }));
 
         it("should accept options", async () => {
@@ -255,7 +255,7 @@ describe("json rpc", () => {
       it("should make a many request", async () => {
         const result = await client.many([
           { method: "hello", params: undefined },
-          { method: "echo", params: { arg: "test" } }
+          { method: "echo", params: { arg: "test" } },
         ]);
 
         expect(result).toEqual(["Hello World!", "test"]);
@@ -264,7 +264,7 @@ describe("json rpc", () => {
       it("should make a many notification request", async () => {
         const result = await client.many([
           { method: "hello", params: undefined, async: true },
-          { method: "echo", params: { arg: "test" }, async: true }
+          { method: "echo", params: { arg: "test" }, async: true },
         ]);
 
         expect(result).toEqual([undefined, undefined]);
@@ -274,7 +274,7 @@ describe("json rpc", () => {
         const result = await client.many([
           { method: "hello", params: undefined, async: true },
           { method: "echo", params: { arg: "test" } },
-          { method: "hello", params: undefined, async: true }
+          { method: "hello", params: undefined, async: true },
         ]);
 
         expect(result).toEqual([undefined, "test", undefined]);
@@ -284,8 +284,8 @@ describe("json rpc", () => {
         const result = await client.many([
           {
             method: "echo",
-            params: {} as any
-          }
+            params: {} as any,
+          },
         ]);
 
         expect(result.length).toEqual(1);

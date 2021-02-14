@@ -184,7 +184,7 @@ async function processRequest<T extends Methods, C = void>(
       {
         code: typeof err.code === "number" ? err.code : -32603,
         message: err.message || "Internal error",
-        data: err.data
+        data: err.data,
       },
       id
     );
@@ -204,7 +204,7 @@ export function createServer<T extends Methods, C = void>(
       }
 
       const results = await Promise.all(
-        payload.map(x => processRequest(resolvers, x, context))
+        payload.map((x) => processRequest(resolvers, x, context))
       );
 
       return results.filter((x): x is
@@ -313,7 +313,7 @@ export function createClient<T extends Methods, C = void>(
           jsonrpc,
           method,
           params,
-          id
+          id,
         })
       ),
       context
@@ -324,8 +324,8 @@ export function createClient<T extends Methods, C = void>(
     }
 
     // Return items in the order they were sent.
-    const lookup = new Map(data.map(data => [data.id, data]));
-    return items.map(item => item.process(lookup.get(item.id))) as any;
+    const lookup = new Map(data.map((data) => [data.id, data]));
+    return items.map((item) => item.process(lookup.get(item.id))) as any;
   };
 
   return rpcClient;
